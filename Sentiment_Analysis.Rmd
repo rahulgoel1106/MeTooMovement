@@ -1,0 +1,277 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(pacman)
+pacman::p_load(knitr,tidyr,dplyr,readr,ggplot2,tibble,stringr,gridExtra,scales,lubridate,ggrepel,reshape2,kableExtra,tm,wordcloud,tidytext,broom,topicmodels,htmlwidgets,wordcloud2,data.table,syuzhet,plotly,twitteR,wesanderson,stringi,dplyr,viridis,glue,tidytext,tidyverse,textdata,tm,tokenizers)
+```
+
+Set workind directory Read data
+```{r}
+setwd("C:/#metoo")
+tweets <- as_tibble(data.table::fread("Clean_HateSpeech_PlaceOfAssault_ColorRace.csv", encoding= "UTF-8", sep = '\t'))
+```
+
+Sentiment Analysis
+```{r}
+Original.tweets = as.data.table(unique(tweets$text))
+
+# CLEANING TWEETS
+Twitter_text_clean <- function(tweets.df){
+tweets.df=gsub("&amp", "", tweets.df)
+tweets.df = gsub("&amp", "", tweets.df)
+tweets.df = gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", tweets.df)
+tweets.df = gsub("@\\w+", "", tweets.df)
+tweets.df = gsub("[[:punct:]]", "", tweets.df)
+tweets.df = gsub("[[:digit:]]", "", tweets.df)
+tweets.df = gsub("http\\w+", "", tweets.df)
+tweets.df = gsub("[ \t]{2,}", "", tweets.df)
+tweets.df = gsub("^\\s+|\\s+$", "", tweets.df)
+
+tweets.df <- iconv(tweets.df, "UTF-8", "ASCII", sub="")
+
+return(tweets.df)
+}
+
+Original.tweets$V1 = Twitter_text_clean(Original.tweets$V1)
+
+```
+
+
+
+```{r}
+Original.tweets = as.data.table(unique(tweets$text))
+
+#clean up the data and create a corpus
+Original.tweets$V1 <- sapply(Original.tweets$V1,function(row) iconv(row, "latin1", "ASCII", sub=""))
+cloud <- Corpus(VectorSource(Original.tweets$V1))
+cloud <- cloud %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace) %>%
+  tm_map(removeNumbers)%>%
+  tm_map(content_transformer(tolower)) %>%
+  tm_map(removeWords, stopwords('english')) %>%
+  tm_map(removeWords, c('amp','metoo'))
+```
+
+
+```{r}
+metoo_sentiment <- tweets %>%
+  unnest_tokens(word, textData)
+metoo_sentiment_freq <- metoo_sentiment %>%
+  inner_join(get_sentiments("nrc")) %>% 
+  dplyr::count(sentiment)  %>% 
+  ggplot(aes(sentiment,n, fill=sentiment)) + 
+  geom_col(color='white', stat='identity') + 
+  theme(axis.text.y=element_blank()) + 
+  labs(x='Sentiment', y='Frequency') + 
+  scale_fill_viridis(discrete=TRUE, option = "C") + 
+  theme(text = element_text(size = 15))
+metoo_sentiment_freq
+```
+
+```{r}
+metoo_sentiment_freq2 <- metoo_sentiment %>%
+  inner_join(get_sentiments("nrc")) %>%
+  dplyr::count(word, sentiment, sort = TRUE) %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) + 
+  geom_col(show.legend=FALSE) + 
+  facet_wrap(~sentiment, scales='free_y', nrow=3) + 
+  labs(y = NULL, x = NULL) + 
+  coord_flip() + 
+  #theme_calc() + 
+  scale_fill_viridis(discrete=TRUE, option = "C") + 
+  theme(text = element_text(size=10))
+metoo_sentiment_freq2
+```
+
+Hate Speech Data Cleaning
+```{r}
+
+setwd("C:/#metoo")
+tweets <- as_tibble(data.table::fread("HateSpeech.csv", encoding= "UTF-8",header = TRUE))
+
+tweets$textData <- str_replace_all(tweets$text, "[\n]" , "") #remove new lines
+tweets$textData <- str_replace_all(tweets$textData, "&amp", "") # rm ampersand
+
+#URLs are always at the end and did not counts towards the 140 characters limit
+tweets$textData <- str_replace_all(tweets$textData, "http.*" , "")
+
+#Remove Hashtags
+tweets$textData <- str_replace_all(tweets$textData, "#\\S+" , "")
+
+#tweets$text <- gsub('(RT|via)((?:\\b\\W*@\\w+)+)', '', tweets$text)
+tweets$textData <- gsub('@\\w+', '', tweets$textData) # remove at people
+
+tweets$textData <- iconv(tweets$textData, "latin1", "ASCII", sub="")
+
+tweets$textData = tolower(tweets$textData)
+
+tweets$textData = removeNumbers(tweets$textData)
+tweets$textData <- removeWords(tweets$textData, tidytext::stop_words$word)
+
+tweets$textData <- removePunctuation(tweets$textData)
+
+tweets$textData <- stripWhitespace(tweets$textData)
+tweets$textData <- removeWords(tweets$textData, c("metoo","maga", "metooindia","kavanaugh","trump","people","movement","moment","story","stories","women"))
+
+fwrite(tweets,file = paste0("Clean_HateSpeech.csv"), sep="\t")
+```
+
+Place of assault
+```{r}
+tweets = as.data.table(tweets)
+tweets$Home = 0
+tweets$WorkPlace = 0
+tweets$PublicPlace = 0
+tweets$StudyPlace = 0
+Home = c("home", "parent", "parents", "legal guardian", "fiend", "friens", "domestic", "family", "house", "residence", "mother", "father", "single parent", "lone parent", "brother", "sister", "step brother", "step sister", "stepmother", "stepfather", "adoptive mother", "adoptive father", "apartment", "best friend", "familiar", "classmate", "household")
+
+WorkPlace = c("workplace", "work place", "work", "work environment", "office", "employment", "interview", "employer", "employee", "job", "business", "organization", "working", "factories", "co-worker", "client", "supervisor", "hire", "company", "colleague", "workmate")
+
+PublicPlace = c("park","bus","public place", "theater", "stranger", "train", "resturant", "bar", "bus stop", "public park", "mall", "street")
+
+StudyPlace = c("school", "college", "student","academic", "educational","teacher","professor", "secondary school", "university", "faculty", "study", "studies", "classmate")
+
+library(tokenizers)
+tweets$Home = as.data.table(sapply(tweets$textData, function(x) sum(unlist(tokenize_words(x)) %in% Home)))
+
+tweets$WorkPlace = as.data.table(sapply(tweets$textData, function(x) sum(unlist(tokenize_words(x)) %in% WorkPlace)))
+
+tweets$PublicPlace = as.data.table(sapply(tweets$textData, function(x) sum(unlist(tokenize_words(x)) %in% PublicPlace)))
+
+tweets$StudyPlace = as.data.table(sapply(tweets$textData, function(x) sum(unlist(tokenize_words(x)) %in% StudyPlace)))
+
+fwrite(tweets,file = paste0("Clean_HateSpeech_PlaceOfAssault_ColorRace.csv"), sep="\t")
+```
+
+Tweets with color race
+```{r}
+tweets$ColorRace = 0
+
+ColorRace = c("racist", "race","white", "black", "white people", "black people", "white male", "black male", "white female", "black female", "black woman", "white woman", "white priviledge", "black privilege", "blacklivesmatters", "white supremacy", "black supremacy", "white men", "black men", "brown", "white boy", "black boy", "white girl", "black girl", "white boys", "black boys", "white girls", "black girls", "white males", "black males", "white females", "black females", "white male privilege", "black male privilege", "white guy", "white guys", "black guy", "black guys")
+
+tweets$ColorRace = as.data.table(sapply(tweets$textData, function(x) sum(unlist(tokenize_words(x)) %in% ColorRace)))
+```
+
+Sentiment Analysis for color race
+```{r}
+tweets = as.data.table(tweets)
+
+tweets.Color = tweets[tweets$ColorRace>0,]
+
+Original.tweets = as.data.table(unique(tweets.Color$textData))
+
+
+#clean up the data and create a corpus
+Original.tweets$V1 <- sapply(Original.tweets$V1,function(row) iconv(row, "latin1", "ASCII", sub=""))
+cloud <- Corpus(VectorSource(Original.tweets$V1))
+cloud <- cloud %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace) %>%
+  tm_map(removeNumbers)%>%
+  tm_map(content_transformer(tolower)) %>%
+  tm_map(removeWords, stopwords('english')) %>%
+  tm_map(removeWords, c('amp','metoo'))
+```
+```{r}
+
+mysentiments = get_sentiments("nrc")
+mysentiments$sentiment[13655] = "negative"
+mysentiments$sentiment[13656] = "anger"
+mysentiments$sentiment[13654] = "sadness"
+mysentiments <- mysentiments[-c(13653),]
+mysentiments <- mysentiments[-c(13656),]
+
+metoo_sentiment <- tweets.Color %>%
+  unnest_tokens(word, textData)
+metoo_sentiment_freq <- metoo_sentiment %>%
+  inner_join(mysentiments) %>% 
+  dplyr::count(sentiment, sort = TRUE) %>% 
+  mutate(sentiment = reorder(sentiment, n)) %>% 
+  ggplot(aes(sentiment,n, fill=sentiment)) + 
+  geom_col(color='white', stat='identity') + 
+  theme(axis.text.y=element_blank()) + 
+  labs(x='Sentiment', y='Frequency') + 
+  scale_fill_viridis(discrete=TRUE, option = "C") + 
+  theme(text = element_text(size = 15))
+metoo_sentiment_freq
+```
+
+```{r}
+metoo_sentiment_freq2 <- metoo_sentiment %>%
+  inner_join(mysentiments) %>%
+  dplyr::count(word, sentiment, sort = TRUE) %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) + 
+  geom_col(show.legend=FALSE) + 
+  facet_wrap(~sentiment, scales='free_y', nrow=3) + 
+  labs(y = NULL, x = NULL) + 
+  coord_flip() + 
+  #theme_calc() + 
+  scale_fill_viridis(discrete=TRUE, option = "C") + 
+  theme(text = element_text(size=10))
+metoo_sentiment_freq2
+```
+
+Sentiment Analysis of hate speech and offensive speech
+```{r}
+tweets = as.data.table(tweets)
+tweets.offensive = tweets[tweets$Speech == "offensive_language",]
+tweets.hate = tweets[tweets$Speech == "hate_speech",]
+
+Original.tweets = as.data.table(unique(tweets.offensive$textData))
+
+#clean up the data and create a corpus
+Original.tweets$V1 <- sapply(Original.tweets$V1,function(row) iconv(row, "latin1", "ASCII", sub=""))
+cloud <- Corpus(VectorSource(Original.tweets$V1))
+cloud <- cloud %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace) %>%
+  tm_map(removeNumbers)%>%
+  tm_map(content_transformer(tolower)) %>%
+  tm_map(removeWords, stopwords('english')) %>%
+  tm_map(removeWords, c('amp','metoo'))
+```
+```{r}
+metoo_sentiment <- tweets.Color %>%
+  unnest_tokens(word, textData)
+metoo_sentiment_freq <- metoo_sentiment %>%
+  inner_join(mysentiments) %>% 
+  dplyr::count(sentiment) %>% 
+  ggplot(aes(sentiment,n, fill=sentiment)) + 
+  geom_col(color='white', stat='identity') + 
+  theme(axis.text.y=element_blank()) + 
+  labs(x='Sentiment', y='Frequency') + 
+  scale_fill_viridis(discrete=TRUE, option = "C") + 
+  theme(text = element_text(size = 15))
+metoo_sentiment_freq
+```
+
+```{r}
+metoo_sentiment_freq2 <- metoo_sentiment %>%
+  inner_join(mysentiments) %>%
+  dplyr::count(word, sentiment, sort = TRUE) %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) + 
+  geom_col(show.legend=FALSE) + 
+  facet_wrap(~sentiment, scales='free_y', nrow=3) + 
+  labs(y = NULL, x = NULL) + 
+  coord_flip() + 
+  #theme_calc() + 
+  scale_fill_viridis(discrete=TRUE, option = "C") + 
+  theme(text = element_text(size=10))
+metoo_sentiment_freq2
+```

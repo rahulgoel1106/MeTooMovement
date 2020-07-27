@@ -1,0 +1,84 @@
+
+```{r}
+library(pacman)
+pacman::p_load(NLP,tm,topicmodels,SnowballC,tibble,stringr,data.table,httr)
+```
+
+```{r}
+setwd("C:/#metoo")
+tweets <- as_tibble(data.table::fread("Clean_HateSpeech_PlaceOfAssault_ColorRace.csv", encoding= "UTF-8", sep = '\t'))
+```
+
+```{r}
+HateSpeech = tweets %>% filter(PublicPlace>0) %>% select(textData)
+
+```
+
+```{r}
+Clean_corpus = function(tweets){
+  # Here we pre-process the data in some standard ways. I'll post-define each step
+tweets <- iconv(tweets, to = "ASCII", sub = " ")  # Convert to basic ASCII text to avoid silly characters
+tweets <- tolower(tweets)  # Make everything consistently lower case
+tweets <- gsub("rt", " ", tweets)  # Remove the "RT" (retweet) so duplicates are duplicates
+tweets <- gsub("@\\w+", " ", tweets)  # Remove user names (all proper names if you're wise!)
+tweets <- gsub("http.+ |http.+$", " ", tweets)  # Remove links
+tweets <- gsub("[[:punct:]]", " ", tweets)  # Remove punctuation
+tweets <- gsub("[ |\t]{2,}", " ", tweets)  # Remove tabs
+tweets <- gsub("amp", " ", tweets)  # "&" is "&amp" in HTML, so after punctuation removed ...
+tweets <- gsub("^ ", "", tweets)  # Leading blanks
+tweets <- gsub(" $", "", tweets)  # Lagging blanks
+tweets <- gsub(" +", " ", tweets) # General spaces (should just do all whitespaces no?)
+tweets <- unique(tweets)  # Now get rid of duplicates!
+
+corpus <- Corpus(VectorSource(tweets))  # Create corpus object
+
+# Remove English stop words. This could be greatly expanded!
+# Don't forget the mc.cores thing
+corpus <- tm_map(corpus, removeWords, stopwords("en"))  
+
+# Remove numbers. This could have been done earlier, of course.
+corpus <- tm_map(corpus, removeNumbers)
+
+return(corpus)
+}
+
+clean.corpus.hate = Clean_corpus(HateSpeech$textData)
+```
+
+```{r}
+# Get the lengths and make sure we only create a DTM for tweets with
+# some actual content
+doc.lengths <- rowSums(as.matrix(removeSparseTerms(DocumentTermMatrix(clean.corpus.hate), .999)))
+dtm <- DocumentTermMatrix(clean.corpus.hate[doc.lengths > 0])
+# model <- LDA(dtm, 10)  # Go ahead and test a simple model if you want
+
+
+
+# Now for some topics
+SEED = sample(1:1000000, 1)  # Pick a random seed for replication
+k = 10  # Let's start with 10 topics
+
+# This might take a minute!
+models <- list(
+  CTM       = CTM(dtm, k = k, control = list(seed = SEED, var = list(tol = 10^-4), em = list(tol = 10^-3))),
+  VEM       = LDA(dtm, k = k, control = list(seed = SEED)),
+  VEM_Fixed = LDA(dtm, k = k, control = list(estimate.alpha = FALSE, seed = SEED)),
+  Gibbs     = LDA(dtm, k = k, method = "Gibbs", control = list(seed = SEED, burnin = 1000,
+                                                               thin = 100,    iter = 1000))
+)
+
+
+
+# There you have it. Models now holds 4 topics. See the topicmodels API documentation for details
+
+# Top 10 terms of each topic for each model
+# Do you see any themes you can label to these "topics" (lists of words)?
+lapply(models, terms, 10)
+```
+
+```{r}
+assignments <- sapply(models, topics) 
+
+head(assignments, n=10)
+```
+

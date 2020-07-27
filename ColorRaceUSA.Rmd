@@ -1,0 +1,68 @@
+---
+title: "USA case study"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+setwd("C:/Users/Rahul Goel/Desktop")
+db = as_tibble(data.table::fread("USAMap2.csv", encoding= "UTF-8"))
+
+db$USPopPerc = db$TotalPopulation/sum(db$TotalPopulation)
+
+db$NonWhitePopPerc = (db$TotalPopulation - db$Population)/sum(db$TotalPopulation)
+
+par(mfrow=c(1, 3))
+scatter.smooth(x=db$USPopPerc*100, y=db$TweetPerc, ylim = c(0,6), xlab = "Total population (%)", ylab = "Tweets (%)",font.lab=2, main="Tweets ~ Total population (USA)")
+
+scatter.smooth(x=db$WhitPopulation/49, y=db$TweetPerc, ylim = c(0,2), xlab = "White population (%)", ylab = "Tweets (%)",font.lab=2, main="Tweets ~ White population (USA)")
+
+scatter.smooth(x=db$NonWhitePopPerc*100, y=db$TweetPerc, xlab = "Non-white population (%)", ylab = "Tweets (%)",font.lab=2, main="Tweets ~ Non-white population (USA)")
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+```{r}
+library(e1071)  # for skewness function
+par(mfrow=c(1, 3))  # divide graph area in 2 columns
+
+plot(density(db$USPopPerc*100), main="Total population (%)", ylab="Frequency", sub=paste("Skewness:", round(e1071::skewness(db$USPopPerc*100), 2)))  # density plot for 'speed'
+
+polygon(density(db$USPopPerc*100), col="red")
+
+plot(density(db$WhitPopulation/49), main="White population (%)", ylab="Frequency", sub=paste("Skewness:", round(e1071::skewness(db$WhitPopulation/49), 2)))  # density plot for 'speed'
+
+polygon(density(db$WhitPopulation/49), col="red")
+
+plot(density(db$NonWhitePopPerc*100), main="Non-white population (%)", ylab="Frequency", sub=paste("Skewness:", round(e1071::skewness(db$NonWhitePopPerc*100), 2)))  # density plot for 'speed'
+
+polygon(density(db$NonWhitePopPerc*100), col="red")
+
+```
+
+```{r}
+
+plot(density(db$TweetPerc), main="Density Plot: Tweets (%)", ylab="Frequency", xlim = c(-0.5,7), sub=paste("Skewness:", round(e1071::skewness(db$TweetPerc), 2)))  # density plot for 'dist'
+
+polygon(density(db$TweetPerc), col="red")
+```
+
+```{r}
+cor(db$WhitPopulation, db$TweetPerc)
+linearMod <- lm(TweetPerc ~ WhitPopulation, data=db)
+summary(linearMod)
+
+cor(db$USPopPerc, db$TweetPerc)
+linearMod2 <- lm(TweetPerc ~ USPopPerc, data=db)
+summary(linearMod2)
+
+cor(db$NonWhitePopPerc, db$TweetPerc)
+linearMod3 <- lm(TweetPerc ~ NonWhitePopPerc, data=db)
+summary(linearMod3)
+``

@@ -1,0 +1,67 @@
+```{r}
+library(pacman)
+pacman::p_load(plotrix,ggplot2,eeptools)
+
+UserData = tweets %>% select(user_id, followers_count)
+#UserData = unique(UserData)
+UserData = UserData %>% group_by(user_id) %>% summarise(followers_count = max(followers_count))
+df1 <- transform(UserData, group=cut(followers_count, 
+            breaks=c(0,10,50,100,250,500,max(UserData$followers_count)),
+                        labels=c("<5","10","50","100", "250", "500<")))
+
+res <- do.call(data.frame,aggregate(followers_count~group, df1, 
+                                    FUN=function(x) c(Count=length(x))))
+
+pct <- round(res$followers_count/sum(res$followers_count)*100)
+
+res$group <- paste0(res$group, "(",pct,"%)") # add percents to labels
+#res$group <- paste(res$group,"%",sep="") # ad % to label
+
+pie(res$followers_count,labels=res$group,col=rainbow(length(res$group)),
+   main="Followers count")
+
+# Barplot
+bp<- ggplot(res, aes(x="", followers_count, fill=group))+ geom_bar(width = 1, stat = "identity")
+
+bp
+pie <- bp + coord_polar("y", start=0)
+pie
+```
+
+```{r}
+#UserData$created_at <- ymd_hms(UserData$created_at)
+UserData$account_created_at <- ymd_hms(UserData$account_created_at)
+UserData$account_created_at = as.Date(UserData$account_created_at)
+UserData$account_create_date_InMonths <- floor(age_calc(UserData$account_created_at) - 7)
+```
+
+```{r}
+gluten <- tweets %>%  select(user_id,status_id,text, is_retweet) %>%
+	group_by(user_id,status_id) %>%
+	summarise( 
+		    hashtags=sum(str_count(text,"#(\\d|\\w)+")),
+		    mentions=sum(str_count(text,"@(\\d|\\w)+")),
+		    urls=sum(str_count(text,"http.+ |http.+$"))
+	)
+```
+
+Top retweeted text
+```{r}
+
+UserData = tweets %>% select(text,retweet_count, created_at)
+#UserData = unique(UserData)
+UserData = UserData %>% group_by(text) %>% summarise(retweet_count = max(retweet_count), created_at = min(created_at))
+
+# select top retweeted tweets
+table(UserData$retweet_count)
+selected <- which(UserData$retweet_count >= 20000)
+# plot them
+dates <- strptime(UserData$created_at, format="%Y-%m-%d")
+plot(x=dates, y=UserData$retweet_count, type="l", col="grey",
+xlab="Date", ylab="Times retweeted")
+colors <- rainbow(10)[1:length(selected)]
+points(dates[selected], UserData$retweet_count[selected],
+pch=19, col=colors)
+text(dates[selected], UserData$retweet_count[selected],
+UserData$text[selected], col=colors, cex=.9)
+```

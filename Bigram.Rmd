@@ -1,0 +1,64 @@
+```{r}
+library(pacman)
+pacman::p_load(tm,tibble,stringr,data.table,dplyr,tidytext,tidyr)
+```
+
+```{r}
+setwd("C:/#metoo")
+tweets <- as_tibble(data.table::fread("Clean_HateSpeech_PlaceOfAssault_ColorRace.csv", encoding= "UTF-8", sep = '\t'))
+```
+
+```{r}
+variable = "ColorRace"
+
+tweetsSample = tweets %>% filter(ColorRace>0) %>% select(textData)
+```
+
+```{r}
+tweets_bigrams <- tweetsSample %>%
+  unnest_tokens(bigram, textData, token = "ngrams", n = 2)
+
+bigrams_separated <- tweets_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered <- bigrams_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+# new bigram counts:
+bigram_counts <- bigrams_filtered %>% 
+  count(word1, word2, sort = TRUE)
+
+# filter for only relatively common combinations
+bigram_counts1 <- bigram_counts %>% filter(n > 40)
+```
+
+```{r}
+per_route = bigram_counts1 %>% rename(source = word1, destination = word2, weights = n)
+
+#samplingEdges = per_route[per_route$weight>0,]
+NodeDa = unique(rbind(per_route$source, per_route$destination))
+NodeData = unique(as.vector(t(NodeDa)))
+NodeData = as.data.table(NodeData)
+NodeData = NodeData %>% rename(label = NodeData)
+NodeData = NodeData %>% rowid_to_column("id")
+
+#Edge Data
+
+#Assign Ids to the edges
+edges = per_route %>% 
+  left_join(NodeData, by = c("source" = "label")) %>% 
+  rename(from = id)
+
+edges = edges %>% 
+  left_join(NodeData, by = c("destination" = "label")) %>% 
+  rename(to = id)
+
+edges = select(edges, from, to, weights)
+```
+
+```{r}
+edges = edges %>% rename(Source = from, Target = to, weight = weights)
+fwrite(NodeData,file = paste0("UsersUniqueIds",variable,".csv"), sep="\t")
+fwrite(edges,file = paste0("UsersConnections",variable,".csv"), sep="\t")
+```

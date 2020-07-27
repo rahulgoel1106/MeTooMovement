@@ -1,0 +1,794 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+```{r}
+library(pacman)
+pacman::p_load(knitr,tidyr,dplyr,readr,ggplot2,tibble,stringr,gridExtra,scales,lubridate,ggrepel,reshape2,kableExtra,tm,wordcloud,tidytext,broom,topicmodels,htmlwidgets,wordcloud2,data.table,countrycode,rworldmap,openxlsx,ggplot2,RColorBrewer,ggmap,maps,rgdal,scales,maptools,gridExtra,rgeos)
+setwd("C:/#metoo")
+tweet_location = read.xlsx("tweet_location.xlsx")
+tweet_location = tweet_location %>% select(user_id,location,retweet_location,FinalLocation)
+#tweets <- as_tibble(data.table::fread("MeTooCleanedData.csv", encoding= "UTF-8", sep = '\t'))
+
+tweet_location = unique(tweet_location)
+
+CleanLocation <- function (Location) {
+  
+  clean_Location = Location
+  # remove entities
+  clean_Location=str_replace_all(clean_Location,"[^a-zA-Z\\s]", " ")
+  clean_Location = gsub('(RT|via)((?:\\b\\W*@\\w+)+)', '', clean_Location)
+  # remove at people
+  clean_Location = gsub('@\\w+', '', clean_Location)
+  # remove punctuation
+  clean_Location = gsub('[[:punct:]]', '', clean_Location)
+  # remove numbers
+  clean_Location = gsub('[[:digit:]]', '', clean_Location)
+  # remove html links
+  clean_Location = gsub('http\\w+', '', clean_Location)
+  # remove unnecessary spaces
+  clean_Location = gsub('[ \t]{2,}', '', clean_Location)
+  clean_Location = gsub('^\\s+|\\s+$', '', clean_Location)
+  # remove emojis or special characters
+  clean_Location = gsub('<.*>', '', enc2native(clean_Location))
+  
+  clean_Location = tolower(clean_Location)
+  
+  # remove unnecessary spaces
+  clean_Location = gsub('[ \t]{2,}', '', clean_Location)
+  clean_Location = gsub('^\\s+|\\s+$', '', clean_Location)
+  
+  clean_Location
+}
+
+tweet_location$location = CleanLocation(tweet_location$location)
+tweet_location$retweet_location = CleanLocation(tweet_location$retweet_location)
+
+Tweets.By.Location = tweet_location %>% filter(FinalLocation=="Test") %>% group_by(location,retweet_location) %>% count() %>% arrange(desc(n))
+```
+
+```{r}
+tweet_location$FinalLocation = "Test"
+tweet_location = as.data.table(tweet_location)
+stringData = c("india","new delhiindia", "new delhi", "mumbai", "delhi", "gurgaon","mumbaiindia", "usindiarsa", "tughlak lanenew delhi","fatehpuruttar pradesh","bengaluruindia","indiakolkata","chennaiindia","bengaluruindia","new delhidelhi","punemaharashtra","bangalore","chennai","mumbai india","hyderabadindia","puneindia","bharat","hyderabad","delhiindia","indianapolisin","chandigarhindia","bengaluru","gujaratindia","dehradun","bangaloreindia","maharashtraindia","mumbaimaharashtra","mumbaiindiahimalayas","new delhi lucknow","jaipurindia","kolkata","lucknowindia","kerala","delhi ncrgorakhpur","haryanaindia","new delhithiruvananthapuram","uttara prachand ncrindia","tamil naduindia","noidaindia","gurgaonindia","bangalore india","lucknowindia","goadelhi","bombay dilli bombay","noidaindia","gurgaonindia","kolkataindia","jaipur","bombay","pune","hindustan","new delhi srinagarindia","akhand bharat","delhi gurgaon","ahmedabad","prayagrajdelhibengaluru","india today mediaplex","rajiv chowk","bharath","bengaluru southindia","ahmadabad cityindia","ahmedabad","patnaindia","uttar pradeshindia", "mysorenew delhi","bengalurukarnataka","uttar pradeshindia","noida","bombayindia","delhi londonlse","new bombay","srinagarjammudelhi","navi mumbaiindia","nagpurindia","bhubaneswar for now","coimbatoreindia","nagpurindia","karnatakaindia","mumbaimaharashtraindia","keralaindia","bangaloredelhimumbaichennaihyderabad","bollywood","bhopalindia","indoreindia","rajasthanindia","patialagurgaon","punjabindia","lucknow", "delhi ncrindia", "agra indiacourt of sessions","somewhere in a delhi court","bhubaneshwarindia","maduraitamil naduindia","egmore nungambakkamindia","jammu and kashmir","patriarchalindia","bombaynavsari","varanasiindia","indiamumbai","guwahatiindia","jammu and kashmir","nadiadgujaratindia","bengalurukarnataka","new delhi ncr","goaindia","delhi ncr","delhiahmedabad","srinivas purinew delhi","new delhi india","chandigarh","rama lakshmi theprint in", "varanasi chandigarh meerut","biharindia","chennaitamil nadu","jodhpurrajasthanindia","dilli","ahmadabad cityindia", "ghaziabadindia","powaimumbai","modi ji chain se rhne nhi dete","kashmir","srinagar kashmir","west bengalindia","srinagarjammukashmir", "dehradunindia","bhubaneswar","kanpurindia","cuddaloreindia", "srinagarkashmir", "prayagraj","madras","nagpur", "mumbaicoimbatore", "ranchiindia", "gurgaonharyana", "allahabadindia", "thaneindia", "j kindia", "madhya pradeshindia", "vadodara", "dil in delhidard in chennai","mysoreindia","desh badal raha hai","assamindia","suratindia","bombayindia","indore","nanautaindia","nirala nagarlucknow","calcutta","jaipurrajasthan","jodhpurindia","faridabadindia","jaunpurindia","jammujammu and kashmir","taj mahal","united state of uttar pradesh","bhopal", "madurai", "mangaloreindia", "bengaluru and other places", "gurugramharyanaindia", "hindu republic of india","udhampurjammu and kashmir","delhi ncrmumbai","patna delhi","west bengalindia","ahmedabadindia","raipurindia","kolkatawest bengal","basavangudibengaluru","new delhibharat","navi mumbai","vishakhapatnamindia","andhra pradeshindia","madras","bhilaiindia","guwahatiassam","hyderabad india","trivandrumindia", "hyderabadandhra pradesh","vododaraindia", "chennai india", "gurgaonharyana", "himachal pradeshindia", "madurai southindia","pune india","tamilnadu","bhubaneshwarindia","coimbatoreindia","ludhianaindia","bhopalindia","mumbai delhi london","navi mumbaiindia","hyderabad india", "tamil nadu","assam india","new delhibangalore","kundapurain udupi","bihar","new delh","new delhibhubaneswar","india delhi ncr","delhi gurgaon noida","bharatmatakijai","nashikindia","goa","mumbai varanasi mumbai","vijayawadaindia","jodhpur jail","agraindia","jajpur road","delhi noida","chandigarha district court","nooyohk calcutta","new delhilucknowpatna","silcharassam","pathankotindia","champaran bihar india","coimbatore","indoremadhya pradesh","chikkamagaluruindia","srinagar jammu and kashmir","cochinindia","pinarayikannurkerala","delhi india","punjab")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "India"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "India"
+}
+
+stringData = c("washingtondc","new yorkny", "los angeles", "united states", "yorkpa", "los angelesca", "ohio", "new yorkusa", "californiausa", "usa", "miamifl", "new york","harlemny","new york city", "washingtond c", "st louismolouisvilleky", "brooklynny","texasusa","nyc","new jerseyusa","	floridausa","utahusa","washington dc","dc", "minneapolismn", "trump s america", "america", "chicagoil", "minnesotausa", "floridausa","u s a", "oakland", "manhattanny", "north carolinausa", "l acalif", "atlantaga", "san franciscoca", "texas","bostonma", "seattlewa", "houstontx", "connecticutusa", "washingtonusa","pennsylvaniausa","san franciscoca","austintx", "philadelphiapa","michiganusa","atlantaga","ohiousa","california","hollywoodca","chicago","people s republic of chicago", "georgiausa","dallastx","virginiausa","las vegas","california", "las vegasnv", "pittsburghpa","florida","portlandor","san diegoca", "arizonausa","illinoisusa","shondaland","coloradousa","illinoisusa","massachusettsusa","san francisco","the internetnyc","new york and the world","new york philly the world","west palm beachfl","phoenixaz","tennesseeusa","arizonausa","denverco","marylandusa","nashvilletn","everywhereusa","oregonusa","indianausa","india canada","us","south carolinausa","buffalony","left coastca","el pasotx","united states of america","baltimoremd", "bay areaca","missouriusa","san francisco bay area","raleighnc", "washington state", "wisconsinusa","michigan","charlottenc", "south florida", "dc ca co","san antoniotx","bronxqueensnyc", "new jersey","trump country","america the beautiful","kentuckyusa","tampafl","los angelescalifornia","new york cityworldwide","detroitmi","oaklandca","orlandofl","alabamausa","south carolina","colorado","houstontexas","boston","maineusa","la","sacramentoca","new orleansla","detroitchicago", "southern california","san antoniotx","kentuckyusa", "stlouismissouri","louisianausa","seattle","fort worthtx", "columbusoh", "trump nation","cincinnatioh","oklahomausa","new yorkgeorgia y all","north carolina","thomastonga","beavercreekoh","ny","colorado","clevelandoh","detroitmi","arkansasusa","arlingtonva","arkansasusa","atlanta","brooklyn","st louismo","kansas citymo","louisvilleky","cottonwoodaz","virginia","arkansasusa","northern virginia","tulsaokwacotexas","central florida","nw","sacramentoca","philadelphia","mendota heights mn","atlantageorgia","el segundoca","americafirst","new havenct","chicago nyc","hendersonnevada u s a","wonderlandmichigan","arizona","valdostageorgiausa","minnesota","hanovernh","mississippiusa","pennsylvania","new hampshireusa","richmondva","san joseca","bronxny","tucsonaz","kansasusa","milwaukeewi","illinois","massachusetts","hollywoodcalifornia","iowausa","queensny","daytontn","maryland","indiana","san diego","deploravilleusa","god bless america","nevadausa","usa usa usa","washington","new yorknew york","memphistn","washington d c","stanfordca","oregon","summervillesc","austintexas","middle america","cambridgema","district of columbiausa","florida manwashingtondc","albuquerquenm","durhamnc","mississippiusa","wisconsin","rochesterny","houston","tennessee","american","omahane","tiffinoh","new mexicousa","princetonnj","northern california","oklahoma cityok","san joseca","orland park il")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "USA"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "USA"
+}
+
+stringData = c("santa claritaca","lower east sidemanhattan","americannative","alexandriava","alabama","charlestonsc","portlandoregon","berkeleyca","connecticut","birminghamal","oklahoma","montanausa","north america","chillicotheohio","philadelphiausa","madisonwi","dallastexas","virginia beachva","west virginiausa","torontoon","delawareusa","nw georgiaunited states","washingtondcnew york city","washingtondcphoto by ron capobianco","hawaiiusa","hawaii","alaskausa","amsterdam","louisiana","columbusohio","dallas","idahousa","cities throughout the us","kansas city","san francisco bay areaca","orange countycalifornia","nebraskausa","greater new yorkusa","chicago la","colorado springsco","colorado springsco","puerto rico","stlouismo","rhode islandusa","long islandny","honoluluhi","kentucky","renonv","tacomawa","baton rougela","spokanewa","harrisburgpa","chicoca","tuckerga","santa barbaraca","utah","st petersburgfl","boca ratonfl","ashevillenc","lexingtonky","philly","denver","eugeneor","st paulmn")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "USA"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "USA"
+}
+
+stringData = c("london", "londonengland", "londonuk","united kingdom","uk","englandunited kingdom","woodstock nyc boston london","new englandusa","england","nottinghamengland","new england to sf to dc","manchesterengland","london england","london uk","manchester","birminghamengland","bristolengland","south eastengland","new england","warwickshireenglanduk","scotlandunited kingdom","walesunited kingdom","liverpoolengland","londonunited kingdom","leedsengland","engandwales","north westengland","oxfordengland","kentunited kingdom","oxfordengland","south westengland","londonontario","scotlandunited kingdom","brightonengland","scotland","edinburghscotland","glasgowscotland","aucklandnew zealand","glasgow")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "UK"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "UK"
+}
+
+stringData = c("dubaiunited arab emirates","dubai")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "UAE"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "UAE"
+}
+
+
+stringData = c("brasil")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Brazil"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Brazil"
+}
+
+stringData = c("buenos airesargentina","argentina")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Argentina"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Argentina"
+}
+
+stringData = c("warsawpoland")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Poland"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Poland"
+}
+
+stringData = c("philippines","republic of the philippines")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Philippines"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Philippines"
+}
+
+stringData = c("nairobikenya","kenya")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Kenya"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Kenya"
+}
+
+stringData = c("finland","finland europe earth online","helsinkifinland")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Finland"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Finland"
+}
+
+stringData = c("the netherlands","maastrichtthe netherlands","nederland","amsterdamthe netherlands")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Netherlands"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Netherlands"
+}
+
+stringData = c("israel","jerusalemisrael")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Israel"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Israel"
+}
+
+stringData = c("georgia","augustaga","georgia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Georgia"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Georgia"
+}
+
+stringData = c("new zealand")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "New Zealand"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "New Zealand"
+}
+
+stringData = c("nepal","kathmandu","kathmandunepal")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Nepal"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Nepal"
+}
+
+stringData = c("lagosnigeria","nigeria","abujanigeria")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Nigeria"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Nigeria"
+}
+
+stringData = c("moronmongolia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Mongolia"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Mongolia"
+}
+
+stringData = c("dohaqatar")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Qatar"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Qatar"
+}
+
+stringData = c("bangkokthailand")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Thailand"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Thailand"
+}
+
+stringData = c("catalonia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Spain"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Spain"
+}
+
+stringData = c("klmalaysia","malaysia","kuala lumpur")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Malaysia"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Malaysia"
+}
+
+stringData = c("uppsalasweden","stockholmsweden","sweden")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Sweden"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Sweden"
+}
+
+stringData = c("seoulsouth korea","seoulrepublic of korea")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "South Korea"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "South Korea"
+}
+
+
+stringData = c("kampalauganda")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Uganda"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Uganda"
+}
+
+stringData = c("ireland","dublin cityireland","dublin","dublinireland","belfastnorthern ireland")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Ireland"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Ireland"
+}
+
+
+
+stringData = c("australia","melbournevictoria","sydneyaustralia","melbournevictoria","sydneynew south wales","sydney","melbourneaustralia","melbourne","sydney australia","brisbanequeensland","perthwestern australia","brunswick westmelbourneaustralia","adelaidesouth australia","victoriaaustralia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Australia"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Australia"
+}
+
+stringData = c("germany","berlingermany","berlin","berlindeutschland","deutschland")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Germany"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Germany"
+}
+
+stringData = c("south africa","johannesburgsouth africa","cape townsouth africa")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "South Africa"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "South Africa"
+}
+
+stringData = c("canada","ottawa canada","torontoontario","torontocanada","toronto","ontariocanada","canada and the world","vancouverbritish columbia","vancouverbritish columbia","ottawaontario","calgaryalberta","edmontonalberta","albertacanada","edmontonalberta","british columbiacanada","calgaryalbertacanada","vancouver","montreal","torontoontariocanada","winnipegmanitoba","ottawa","calgary","halifaxnova scotia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Canada"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Canada"
+}
+
+stringData = c("saint petersburgrussia","californiausanear russia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Russia"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Russia"
+}
+
+
+stringData = c("japan","tokyojapan","tokyo")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Japan"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Japan"
+}
+
+
+stringData = c("indonesia","jakarta capital region")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Indonesia"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Indonesia"
+}
+
+stringData = c("singapore")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Singapore"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Singapore"
+}
+
+
+stringData = c("maldives")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Maldives"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Maldives"
+}
+
+stringData = c("parisfrance","france","paris")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "France"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "France"
+}
+
+stringData = c("genevaswitzerland","indiaswitzerland","switzerland")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Switzerland"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Switzerland"
+}
+
+stringData = c("bergennorge")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Norway"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Norway"
+}
+
+stringData = c("pakistan","karachipakistan","attockpakistan","wagah","islamabadpakistan","lahorepakistan","islamabadpakistan","karachi","islamabad")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Pakistan"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Pakistan"
+}
+
+stringData = c("hong kong","beijing","chennai beijing")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "China"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "China"
+}
+
+stringData = c("bengladesh","dhakabangladesh","bangladesh")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Bangladesh"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Bangladesh"
+}
+
+stringData = c("sri lanka")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Sri Lanka"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Sri Lanka"
+}
+
+stringData = c("rome","italy")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Italy"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Italy"
+}
+
+
+stringData = c("brusselsbelgium","brussels")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & FinalLocation == "Test"]$FinalLocation = "Belgium"
+tweet_location[location == variable & FinalLocation == "Test"]$FinalLocation = "Belgium"
+}
+```
+
+```{r}
+Location.Count = tweet_location %>% select(FinalLocation) %>% filter(FinalLocation!="Test") %>% group_by(FinalLocation) %>% count() %>% arrange(desc(n))
+
+contryISO3Code = countrycode(Location.Count$FinalLocation, 'country.name', 'iso3c')
+
+meTooDF <- data.frame(country = contryISO3Code)
+
+malMap <- joinCountryData2Map(meTooDF, joinCode = "ISO3",
+  nameJoinColumn = "country")
+# This will join your malDF data.frame to the country map data
+
+mapCountryData(malMap,addLegend=FALSE, numCats = 2,mapRegion = "world", catMethod = "quantiles",oceanCol ="lightblue", mapTitle = "MeToo World",colourPalette = c("white","red"))
+
+
+contryISO3Code = Location.Count
+contryISO3Code$FinalLocation = countrycode(Location.Count$FinalLocation, 'country.name', 'iso3c')
+meTooDF <- data.frame(country = contryISO3Code$FinalLocation, count = contryISO3Code$n)
+malMap <- joinCountryData2Map(meTooDF, joinCode = "ISO3",
+  nameJoinColumn = "country")
+mapCountryData(malMap,nameColumnToPlot="count", addLegend=FALSE, numCats = 2000,mapRegion = "world", catMethod = "quantiles",oceanCol ="lightblue", mapTitle = "MeToo World",colourPalette = c("white","red"))
+
+```
+
+India
+```{r}
+tweet_location$State = "Test"
+tweet_location = as.data.table(tweet_location)
+
+stringData = c("hyderabadandhra pradesh","hyderabad india","vishakhapatnamindia","andhra pradeshindia", "vijayawadaindia")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Andhra Pradesh"
+tweet_location[location == variable & State == "Test"]$State = "Andhra Pradesh"
+}
+
+
+stringData = c("silcharassam","assam india", "assamindia","guwahatiindia","guwahatiassam")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Assam"
+tweet_location[location == variable & State == "Test"]$State = "Assam"
+}
+
+stringData = c("champaran bihar india","bihar","patna delhi","biharindia","patnaindia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Bihar"
+tweet_location[location == variable & State == "Test"]$State = "Bihar"
+}
+
+stringData = c("raipurindia","bhilaiindia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Chattisgarh"
+tweet_location[location == variable & State == "Test"]$State = "Chattisgarh"
+}
+
+stringData = c("goa","goaindia","goadelhi")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Goa"
+tweet_location[location == variable & State == "Test"]$State = "Goa"
+}
+
+stringData = c("gujaratindia","ahmedabad","ahmadabad cityindia","ahmedabad","varanasiindia","delhiahmedabad","varanasi chandigarh meerut","ahmadabad cityindia","vadodara","suratindia","ahmedabadindia","vododaraindia","nadiadgujaratindia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Gujarat"
+tweet_location[location == variable & State == "Test"]$State = "Gujarat"
+}
+
+
+stringData = c("himachal pradeshindia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Himachal Pradesh"
+tweet_location[location == variable & State == "Test"]$State = "Himachal Pradesh"
+}
+
+stringData = c("new delhi srinagarindia","srinagarjammudelhi","jammu and kashmir","jammu and kashmir","kashmir","srinagar kashmir","srinagarjammukashmir","srinagarkashmir", "j kindia","jammujammu and kashmir", "udhampurjammu and kashmir","srinagar jammu and kashmir","mumbaiindiahimalayas")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Jammu and Kashmir"
+tweet_location[location == variable & State == "Test"]$State = "Jammu and Kashmir"
+}
+
+stringData = c("ranchiindia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Jharkhand"
+tweet_location[location == variable & State == "Test"]$State = "Jharkhand"
+}
+
+stringData = c("gurgaon","haryanaindia","patialagurgaon","gurgaonindia","delhi gurgaon","gurgaonharyana","faridabadindia","gurugramharyanaindia","gurgaonharyana")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Haryana"
+tweet_location[location == variable & State == "Test"]$State = "Haryana"
+}
+
+stringData = c("bengaluruindia","bengaluruindia","bangalore","bengaluru","bangaloreindia","bangalore india","prayagrajdelhibengaluru", "bengaluru southindia","bengalurukarnataka","karnatakaindia","bangaloredelhimumbaichennaihyderabad","bengalurukarnataka","bengaluru and other places","new delhibangalore","basavangudibengaluru","mysorenew delhi","mysoreindia","mangaloreindia","chikkamagaluruindia","kundapurain udupi","india today mediaplex")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Karnataka"
+tweet_location[location == variable & State == "Test"]$State = "Karnataka"
+}
+
+stringData = c("kerala","keralaindia","pinarayikannurkerala","trivandrumindia","cochinindia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Kerala"
+tweet_location[location == variable & State == "Test"]$State = "Kerala"
+}
+
+stringData = c("indoremadhya pradesh","bhopalindia","bhopal","madhya pradeshindia","bhopalindia","indoreindia","indore")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Madhya Pradesh"
+tweet_location[location == variable & State == "Test"]$State = "Madhya Pradesh"
+}
+
+stringData = c("mumbai","mumbaiindia","punemaharashtra","mumbai india","puneindia","maharashtraindia","mumbaimaharashtra","bombay","pune","bombayindia","new bombay","navi mumbaiindia","nagpurindia","nagpurindia","mumbaimaharashtraindia","bollywood","bombaynavsari","indiamumbai","powaimumbai","nagpur", "mumbaicoimbatore","thaneindia","bombayindia","navi mumbai","pune india","mumbai delhi london","navi mumbaiindia","nashikindia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Maharashtra"
+tweet_location[location == variable & State == "Test"]$State = "Maharashtra"
+}
+
+
+
+
+stringData = c("bhubaneshwarindia","bhubaneswar","bhubaneshwarindia","bhubaneswar for now")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Odish"
+tweet_location[location == variable & State == "Test"]$State = "Odish"
+}
+
+stringData = c("chandigarhindia","punjabindia","patriarchalindia","chandigarh","chandigarha district court","punjab","ludhianaindia","pathankotindia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Punjab"
+tweet_location[location == variable & State == "Test"]$State = "Punjab"
+}
+
+stringData = c("jaipurindia","jaipur","rajasthanindia","jodhpurrajasthanindia","jaipurrajasthan","jodhpurindia","jodhpur jail","jajpur road")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Rajasthan"
+tweet_location[location == variable & State == "Test"]$State = "Rajasthan"
+}
+
+stringData = c("chennaiindia","chennai","tamil naduindia","dil in delhidard in chennai","cuddaloreindia", "madras","chennaitamil nadu","coimbatoreindia","maduraitamil naduindia","madras","chennai india","tamilnadu","coimbatoreindia","tamil nadu","coimbatore","egmore nungambakkamindia","madurai","madurai southindia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Tamil Nadu"
+tweet_location[location == variable & State == "Test"]$State = "Tamil Nadu"
+}
+
+stringData = c("hyderabadindia","hyderabad","hyderabad india")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Telangana"
+tweet_location[location == variable & State == "Test"]$State = "Telangana"
+}
+
+
+stringData = c("fatehpuruttar pradesh","lucknowindia","uttara prachand ncrindia","noidaindia","gurgaonindia","lucknowindia","noidaindia","uttar pradeshindia","uttar pradeshindia","noida","lucknow", "agra indiacourt of sessions","ghaziabadindia","kanpurindia","nirala nagarlucknow","taj mahal","united state of uttar pradesh","allahabadindia", "nanautaindia","jaunpurindia","agraindia","new delhilucknowpatna","mumbai varanasi mumbai","prayagraj")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Uttar Pradesh"
+tweet_location[location == variable & State == "Test"]$State = "Uttar Pradesh"
+}
+
+stringData = c("dehradun","dehradunindia")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Uttarakhand"
+tweet_location[location == variable & State == "Test"]$State = "Uttarakhand"
+}
+
+stringData = c("indiakolkata","kolkata","kolkataindia","west bengalindia","calcutta","west bengalindia","kolkatawest bengal","nooyohk calcutta")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "West Bengal"
+tweet_location[location == variable & State == "Test"]$State = "West Bengal"
+}
+
+stringData = c("india", "new delhiindia","new delhi","delhi","usindiarsa","tughlak lanenew delhi","new delhidelhi","bharat","delhiindia","indianapolisin","new delhi lucknow","delhi ncrgorakhpur","new delhithiruvananthapuram","hindustan","akhand bharat","rajiv chowk","bharath","delhi londonlse","delhi ncrindia","somewhere in a delhi court","new delhi ncr","delhi ncr","srinivas purinew delhi","new delhi india","dilli","modi ji chain se rhne nhi dete","desh badal raha hai","hindu republic of india","new delhibharat","new delhibangalore","new delh","new delhibhubaneswar","india delhi ncr","delhi gurgaon noida","bharatmatakijai","delhi noida","delhi india","bombay dilli bombay","delhi ncrmumbai")
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & State == "Test"]$State = "Delhi"
+tweet_location[location == variable & State == "Test"]$State = "Delhi"
+}
+```
+
+USA
+```{r}
+tweet_location$UsState = "Test"
+tweet_location = as.data.table(tweet_location)
+
+stringData = c("washingtondc","washingtond c","washington dc","dc","washingtonusa","washington state","dc ca co","washington","washington d c", "seattlewa","seattle","united states", "usa","trump s america")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Washington"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Washington"
+}
+
+stringData = c("new yorkny", "yorkpa","new yorkusa","new york city","nyc","the internetnyc","new york and the world","new york philly the world","new york cityworldwide","new yorkgeorgia y all","ny","chicago nyc","new yorknew york","new york","harlemny","brooklynny","manhattanny", "bronxqueensnyc","queensny","buffalony","brooklyn","bronxny","rochesterny","usa usa usa","everywhereusa")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "New York"
+tweet_location[location == variable & UsState == "Test"]$UsState = "New York"
+}
+
+stringData = c("los angeles","los angelesca","californiausa","san franciscoca","california","la","los angelescalifornia","hollywoodcalifornia","oakland","oaklandca","orlandofl","southern california", "l acalif","hollywoodca","san diegoca","shondaland","san francisco","san francisco bay area","left coastca","bay areaca","sacramentoca","new orleansla","sacramentoca","el segundoca", "san joseca", "san diego","stanfordca","northern california","san joseca","america","u s a","american")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "California"
+tweet_location[location == variable & UsState == "Test"]$UsState = "California"
+}
+
+stringData = c("ohio","ohiousa","columbusoh", "cincinnatioh","beavercreekoh","clevelandoh","nw", "tiffinoh","united states of america","trump country")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Ohio"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Ohio"
+}
+
+stringData = c("miamifl","floridausa","floridausa","florida","south florida","tampafl","florida manwashingtondc","central florida","west palm beachfl")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Florida"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Florida"
+}
+
+stringData = c("chicagoil","chicago","people s republic of chicago","illinoisusa","illinois","detroitchicago", "orland park il")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Illinois"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Illinois"
+}
+
+stringData = c("st louismolouisvilleky","st louismo","missouriusa","stlouismissouri","kansas citymo")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Missouri"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Missouri"
+}
+
+stringData = c("texasusa","texas","austintexas","san antoniotx","tulsaokwacotexas","houstontx","austintx", "dallastx","houstontexas","el pasotx","fort worthtx","houston","america the beautiful","trump nation")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Texas"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Texas"
+}
+
+stringData = c("new jersey","new jerseyusa","princetonnj")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "New Jersey"
+tweet_location[location == variable & UsState == "Test"]$UsState = "New Jersey"
+}
+
+stringData = c("utahusa")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Utah"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Utah"
+}
+
+stringData = c("minneapolismn","minnesotausa","minnesota","mendota heights mn")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Minnesota"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Minnesota"
+}
+
+stringData = c("north carolinausa","raleighnc","charlottenc","north carolina","durhamnc")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "North Carolina"
+tweet_location[location == variable & UsState == "Test"]$UsState = "North Carolina"
+}
+
+stringData = c("atlantaga","georgiausa","thomastonga","atlanta","atlantageorgia","valdostageorgiausa", "god bless america","americafirst", "middle america")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Georgia"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Georgia"
+}
+
+stringData = c("bostonma","massachusettsusa","massachusetts","boston","cambridgema")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Massachusetts"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Massachusetts"
+}
+
+stringData = c("connecticutusa","new havenct")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Connecticut"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Connecticut"
+}
+
+stringData = c("pennsylvaniausa","philadelphiapa","philadelphia","pittsburghpa","pennsylvania")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Pennsylvania"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Pennsylvania"
+}
+
+
+stringData = c("michiganusa","michigan","detroitmi","wonderlandmichigan")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Michigen"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Michigen"
+}
+
+
+stringData = c("virginiausa","arlingtonva","virginia","northern virginia","richmondva")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Virginia"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Virginia"
+}
+
+
+stringData = c("las vegas", "las vegasnv","hendersonnevada u s a","nevadausa")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Navada"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Navada"
+}
+
+stringData = c("portlandor","oregonusa","oregon")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Oregon"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Oregon"
+}
+
+stringData = c("arizonausa","phoenixaz","arizona","cottonwoodaz","tucsonaz")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Arizona"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Arizona"
+}
+
+stringData = c("coloradousa","denverco","colorado")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Colorado"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Colorado"
+}
+
+stringData = c("tennesseeusa","nashvilletn","tennessee","daytontn","memphistn")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Tennessee"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Tennessee"
+}
+
+stringData = c("marylandusa","maryland","baltimoremd")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Maryland"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Maryland"
+}
+
+stringData = c("south carolinausa","south carolina","summervillesc")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "South Carolina"
+tweet_location[location == variable & UsState == "Test"]$UsState = "South Carolina"
+}
+
+stringData = c("mississippiusa")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Mississippi"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Mississippi"
+}
+
+stringData = c("wisconsinusa", "milwaukeewi","wisconsin")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Wisconsin"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Wisconsin"
+}
+
+stringData = c("kentuckyusa","louisvilleky")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Kentucky"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Kentucky"
+}
+
+stringData = c("alabamausa")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Alabama"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Alabama"
+}
+
+stringData = c("maineusa")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Maine"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Maine"
+}
+
+stringData = c("louisianausa")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Louisiana"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Louisiana"
+}
+
+stringData = c("oklahomausa","oklahoma cityok")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Oklahoma"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Oklahoma"
+}
+
+stringData = c("arkansasusa","arkansasusa")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Arkansas"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Arkansas"
+}
+
+stringData = c("hanovernh","new hampshireusa")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "New Hampshire"
+tweet_location[location == variable & UsState == "Test"]$UsState = "New Hampshire"
+}
+
+stringData = c("kansasusa")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Kansas"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Kansas"
+}
+
+stringData = c("iowausa")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Iowa"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Iowa"
+}
+
+stringData = c("indiana","indianausa","india canada","us")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Indiana"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Indiana"
+}
+
+stringData = c("albuquerquenm","new mexicousa")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "New Mexico"
+tweet_location[location == variable & UsState == "Test"]$UsState = "New Mexico"
+}
+
+stringData = c("omahane")
+
+for (variable in stringData[1:length(stringData)]){
+tweet_location[retweet_location == variable & UsState == "Test"]$UsState = "Nebraska"
+tweet_location[location == variable & UsState == "Test"]$UsState = "Nebraska"
+}
+```
+
+
+
+```{r}
+
+Location.Count = tweet_location %>% select(UsState) %>% filter(UsState!="Test") %>% group_by(UsState) %>% count() %>% arrange(desc(n))
+
+write.xlsx(tweet_location, file = "tweet_location.xlsx", sheetName = "Sheet1", col.names = TRUE, row.names = TRUE, append = FALSE)
+```

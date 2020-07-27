@@ -1,0 +1,433 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+Load Libraries
+```{r}
+library(pacman)
+pacman::p_load(knitr,tidyr,dplyr,readr,ggplot2,tibble,stringr,gridExtra,scales,lubridate,ggrepel,reshape2,kableExtra,tm,wordcloud,tidytext,broom,topicmodels,htmlwidgets,wordcloud2,data.table,syuzhet,plotly,eeptools,ggpubr,e1071,Rmisc)
+```
+
+Set workind directory Read data
+```{r}
+setwd("C:/#metoo")
+tweets <- as_tibble(data.table::fread("MeTooCleanedData.csv", encoding= "UTF-8", sep = '\t'))
+```
+
+```{r}
+head(tweets)
+#summary(tweets)
+```
+
+Properly formatting tweets date and time
+```{r}
+tweets$created_at <- ymd_hms(tweets$created_at)
+tweets$account_created_at <- ymd_hms(tweets$account_created_at)
+glimpse(tweets)
+```
+
+Original Tweets by Tweet post time [Can be done for Location]
+```{r}
+Tweets.By.active.time.original = tweets %>% filter(is_retweet==FALSE) %>% group_by(hour(created_at)) %>% count() %>% arrange(-desc(`hour(created_at)`))
+
+NoSum = sum(Tweets.By.active.time.original$n)
+
+plot(Tweets.By.active.time.original$`hour(created_at)`, Tweets.By.active.time.original$n/NoSum*100, xlab = "Time (in hours)", ylab = "Percentage of Tweets", main = "Original Tweets over Time", col = "blue")
+
+```
+
+Re-Tweets only by Tweet post time [Can be done for Location]
+```{r}
+Tweets.By.active.time.retweet = tweets %>% filter(is_retweet==TRUE) %>% group_by(hour(created_at)) %>% count() %>% arrange(desc(n))
+
+NoSum = sum(Tweets.By.active.time.retweet$n)
+
+plot(Tweets.By.active.time.retweet$`hour(created_at)`, Tweets.By.active.time.retweet$n/NoSum*100, xlab = "Time (in hours)", ylab = "Percentage of Tweets", main = "Re-Tweets only over Time", col = "blue")
+
+```
+
+All Tweets by Tweet post time [Can be done for Location]
+```{r}
+Tweets.By.active.time.All = tweets %>% group_by(hour(created_at)) %>% count() %>% arrange(desc(n))
+
+NoSum = sum(Tweets.By.active.time.All$n)
+
+plot(Tweets.By.active.time.All$`hour(created_at)`, Tweets.By.active.time.All$n/NoSum*100, xlab = "Time (in hours)", ylab = "Percentage of Tweets", main = "All Tweets over Time", col = "blue")
+```
+
+
+Most retweet people screen name
+```{r}
+p1 <- tweets %>% filter(is_retweet==FALSE) %>% filter(screen_name != "") %>% group_by(screen_name) %>% count() %>% filter(n>=50) %>% arrange(desc(n)) %>% ungroup()
+
+p1[860:865,] %>% ggplot(aes(x=reorder(screen_name, n), y=n)) +
+        geom_bar(stat="identity", fill="darkgreen") + coord_flip() +
+        labs(x="", y="Retweets count") +
+        theme(legend.position = "none")
+```
+
+Hashtags data
+```{r}
+
+CleanCorpus <- function(x){
+     x <- tm_map(x, content_transformer(tolower))
+     x <- tm_map(x, removeNumbers)
+     x <- tm_map(x, removeWords, tidytext::stop_words$word)
+     x <- tm_map(x, removePunctuation)
+     x <- tm_map(x, stripWhitespace)
+     return(x)
+}
+
+RemoveCommonWords <- function(x) {
+       x <- tm_map(x, removeWords, c("metoo", "#metoo","people","maga","voteblue","bluewave","trump","democrats","kavanaugh","stopkavanaugh","mjakbar","tanushreedutta","metooindia","metoomovement","vote","qanon"))
+       return(x)
+}
+
+CreateTermsMatrix <- function(x) {
+        x <- TermDocumentMatrix(x)
+        x <- removeSparseTerms(x, .999)
+        x <- as.matrix(x)
+        y <- rowSums(x)
+        y <- sort(y, decreasing=TRUE)
+        return(y)
+}
+
+tweets$HashtagData <- sapply(str_extract_all(tweets$text, "#\\S+"), paste, collapse=" ")
+
+tweetsHashtag = tweets %>% filter(is_retweet == FALSE) %>% select(status_id, HashtagData)
+tweetsHashtag <- tweetsHashtag %>% rename(doc_id = status_id, text = HashtagData )
+
+tweetsHashtag$text <- str_replace_all(tweetsHashtag$text, "[\n]" , "") #remove new lines
+tweetsHashtag$text <- str_replace_all(tweetsHashtag$text, "&amp", "") # rm ampersand
+tweetsHashtag$text <- iconv(tweetsHashtag$text, "latin1", "ASCII", sub="")
+
+Corpus <- DataframeSource(tweetsHashtag)
+Corpus <- VCorpus(Corpus)
+Corpus <- CleanCorpus(Corpus)
+Corpus1 <- RemoveCommonWords(Corpus)
+#inspect(Corpus[1:2])
+content(Corpus[[1]])
+
+set.seed(2018)
+
+TermFreq <- CreateTermsMatrix(Corpus1)
+
+save(TermFreq, file = "TermFreqHashtagsWithoutMetoo.RData")
+
+DF <- data.frame(word=names(TermFreq), count=TermFreq)
+
+DF[1:20,] %>%
+        ggplot(aes(x=(reorder(word, count)), y=count)) +
+        geom_bar(stat='identity', fill="blue") + coord_flip() + theme(legend.position = "none") +
+        labs(x="")
+
+wordcloud(DF$word, DF$count, max.words = 100, scale=c(2,.5), random.color = TRUE, colors=brewer.pal(9,"Set1"))
+
+DF1 <- data.frame(word=names(TermFreq), freq=TermFreq)
+
+my_graph = wordcloud2(DF1, size = 0.5)
+saveWidget(my_graph, "tmp.html", selfcontained = F)
+#webshot::install_phantomjs()
+webshot("tmp.html", "wc1.png", delay = 5, vwidth = 2000, vheight = 2000)
+
+fig = system.file("Bird.png",package = "wordcloud2")
+my_graph = wordcloud2(DF1, size = 0.5, figPath = "MeToo4.png")
+
+saveWidget(my_graph, "tmp.html", selfcontained = F)
+#webshot::install_phantomjs()
+webshot("tmp.html", "wc1.png", delay = 5, vwidth = 2000, vheight = 2000)
+```
+```{r}
+# break up the strings in each row by " "
+temp <- strsplit(Hashtagdata$hashtags2, split=" ")
+
+# count the number of words as the length of the vectors
+Hashtagdata$wordCount <- sapply(temp, length)
+
+outlier_values <- boxplot.stats(Hashtagdata$wordCount)$out
+boxplot(Hashtagdata$wordCount)
+
+support = c("believewomen", "believesurvivors", "ibelieveher", "ibelievesurvivors")
+Oppose = c("metoodebate", "metooliars", "fakenews", "womensfiction","femalepredators","himtoo")
+Masculism =  c("mentoo","hetoo")
+Politics = c("democrats")
+
+Hashtagdata <- tweets %>% select(hashtags) %>% filter(hashtags != "")
+Hashtagdata$hashtags = tolower(Hashtagdata$hashtags)
+Hashtagdata$hashtags2 = str_replace_all(Hashtagdata$hashtags, "[|]", " ")
+Hashtagdata <- Hashtagdata %>% filter(hashtags != "unsealthedeals")
+
+
+for(i in 1:nrow(Hashtagdata)){
+Hashtagdata$support[i] = sum(str_count(Hashtagdata$hashtags2[i], support))
+Hashtagdata$Oppose[i] = sum(str_count(Hashtagdata$hashtags2[i], Oppose))
+Hashtagdata$Masculism[i] = sum(str_count(Hashtagdata$hashtags2[i], Masculism))
+
+}
+```
+
+
+Text cleaning (Some basic text cleaning)
+```{r}
+tweets$text <- str_replace_all(tweets$text, "[\n]" , "") #remove new lines
+tweets$text <- str_replace_all(tweets$text, "&amp", "") # rm ampersand
+
+#URLs are always at the end and did not counts towards the 140 characters limit
+tweets$text <- str_replace_all(tweets$text, "http.*" , "")
+
+#Remove Hashtags
+tweets$text <- str_replace_all(tweets$text, "#\\S+" , "")
+
+#tweets$text <- gsub('(RT|via)((?:\\b\\W*@\\w+)+)', '', tweets$text)
+tweets$text <- gsub('@\\w+', '', tweets$text) # remove at people
+
+tweets$text <- iconv(tweets$text, "latin1", "ASCII", sub="")
+```
+
+```{r}
+tweets <- tweets %>% rename (doc_id = status_id )
+OriginalTweets <- tweets %>% filter(is_retweet=="FALSE")
+Corpus <- DataframeSource(OriginalTweets)
+Corpus <- VCorpus(Corpus)
+
+inspect(Corpus[1:2])
+content(Corpus[[1]])
+
+save(Corpus, file = "Corpus.RData")
+load("Corpus.RData")
+```
+
+```{r}
+CleanCorpus <- function(x){
+     x <- tm_map(x, content_transformer(tolower))
+     x <- tm_map(x, removeNumbers)
+     x <- tm_map(x, removeWords, tidytext::stop_words$word)
+     x <- tm_map(x, removePunctuation)
+     x <- tm_map(x, stripWhitespace)
+     return(x)
+}
+
+RemoveCommonWords <- function(x) {
+       x <- tm_map(x, removeWords, c("metoo","maga", "metooindia","kavanaugh","trump","people","movement","moment","story","stories","women"))
+       return(x)
+}
+
+CreateTermsMatrix <- function(x) {
+        x <- TermDocumentMatrix(x)
+        x <- removeSparseTerms(x, .999)
+        x <- as.matrix(x)
+        y <- rowSums(x)
+        y <- sort(y, decreasing=TRUE)
+        return(y)
+}
+
+Corpus <- CleanCorpus(Corpus)
+save(Corpus, file = "Corpus2.RData")
+load("Corpus2.RData")
+set.seed(2018)
+Corpus = RemoveCommonWords(Corpus)
+#load("Corpus2.RData")
+TermFreq <- CreateTermsMatrix(Corpus)
+
+#content(Corpus[[1]])
+```
+
+```{r}
+DF <- data.frame(word=names(TermFreq), count=TermFreq)
+
+DF[1:20,] %>%
+        ggplot(aes(x=(reorder(word, count)), y=count)) +
+        geom_bar(stat='identity', fill="blue") + coord_flip() + theme(legend.position = "none") +
+        labs(x="")
+```
+
+```{r}
+set.seed(2018)
+
+#Corpus1 <- RemoveCommonWords(Corpus)
+
+#TermFreq <- CreateTermsMatrix(Corpus1)
+DF <- data.frame(word=names(TermFreq), count=TermFreq)
+
+wordcloud2(DF, size = 0.5, figPath = "MeToo4.png")
+
+wordcloud2(DF, size = 0.5, figPath = "MeToo4.png")
+
+wordcloud(DF$word, DF$count, max.words = 100, scale=c(2.5,.5), random.color = TRUE, colors=brewer.pal(9,"Set1"))
+```
+
+Save wordcloud2 as pdf
+```{r}
+setwd("C:/Users/Rahul Goel/Desktop")
+#install webshot
+library(webshot)
+webshot::install_phantomjs()
+
+# Make the graph
+my_graph=wordcloud2(DF, size=0.5)
+
+# save it in html
+library("htmlwidgets")
+saveWidget(my_graph,"tmp.html",selfcontained = F)
+
+# and in pdf
+webshot("tmp.html","fig_1.pdf", delay = 15, vwidth = 1200, vheight=1200)
+```
+
+```{r}
+library(pacman)
+pacman::p_load(knitr,tidyr,dplyr,readr,ggplot2,tibble,stringr,gridExtra,scales,lubridate,ggrepel,reshape2,kableExtra,tm,wordcloud,tidytext,broom,topicmodels,htmlwidgets,wordcloud2,data.table,syuzhet,plotly,eeptools,ggpubr,e1071,Rmisc)
+
+setwd("C:/#metoo")
+tweets <- as_tibble(data.table::fread("MeTooCleanedData.csv", encoding= "UTF-8", sep = '\t'))
+
+tweets = tweets %>% select(user_id,screen_name,text,hashtags)
+support = c("believewomen", "believesurvivors", "ibelieveher", "ibelievesurvivors")
+Oppose = c("metoodebate", "metooliars", "fakenews", "womensfiction","femalepredators","himtoo")
+Masculism =  c("mentoo","hetoo")
+
+tweets$hashtags = tolower(tweets$hashtags)
+tweets$hashtags = str_replace_all(tweets$hashtags, "[|]", " ")
+tweets$cat = "test"
+
+x <- sapply(support, function(x) grepl(tolower(x), tolower(tweets$hashtags)))
+tweets$Count <- apply(x, 1, function(i) sum(i))
+tweets$cat[tweets$Count > 0 & tweets$cat == "test"] = "Support"
+
+x <- sapply(Oppose, function(x) grepl(tolower(x), tolower(tweets$hashtags)))
+tweets$Count <- apply(x, 1, function(i) sum(i))
+tweets$cat[tweets$Count > 0 & tweets$cat == "test"] = "Oppose"
+
+x <- sapply(Masculism, function(x) grepl(tolower(x), tolower(tweets$hashtags)))
+tweets$Count <- apply(x, 1, function(i) sum(i))
+tweets$cat[tweets$Count > 0 & tweets$cat == "test"] = "Masculism"
+
+db <- as_tibble(data.table::fread("Clean_HateSpeech_PlaceOfAssault_ColorRace.csv", encoding= "UTF-8", sep = '\t'))
+db$category = "test"
+db$category[db$ColorRace>1 & db$category == "test"] = "Color"
+db$category[db$Home>0 & db$category == "test"] = "Domestic"
+db$category[db$WorkPlace>0 & db$category == "test"] = "Work"
+db$category[db$PublicPlace>0 & db$category == "test"] = "Public"
+db$category[db$StudyPlace>0 & db$category == "test"] = "Study"
+db$category[db$Speech == "hate_speech" & db$category == "test"] = "Hate"
+db$category[db$Speech == "offensive_language" & db$category == "test"] = "Offensive"
+
+tweets = as.data.table(tweets)
+db = as.data.table(db)
+# set the ON clause as keys of the tables:
+setkey(tweets,text)
+setkey(db,text)
+
+# perform the join using the merge function
+Result <- merge(tweets,db, by= "text", all.x=TRUE)
+temp = Result[Result$cat!=Result$category,]
+temp$FinalCategory = ifelse(temp$category == "test",temp$cat,temp$category)
+#a = merge(x=db, y=tweets, by = "text", all.x = TRUE)
+temp1 = temp %>% select(user_id,FinalCategory)
+
+
+
+temp2 = temp1 %>% add_count(user_id,FinalCategory) %>%
+  # select max or first occurrence by patient
+  group_by(user_id) %>%
+  slice(which.max(n))
+
+temp2$n=NULL
+temp2 <- tibble::rowid_to_column(temp2, "id")
+temp2$label = temp2$user_id
+temp2$user_id = NULL
+
+setwd("C:/#metoo/Output")
+fwrite(temp2,file = paste0("Nodes.csv"), sep="\t")
+
+setwd("C:/#metoo/Output")
+temp2 = fread("UsersCommunity.csv", sep = "\t")
+temp2 = temp2[sample(nrow(temp2), as.integer(nrow(temp2)*0.5)), ]
+
+tweetRetweetUserIds = tweets %>% filter(is_retweet=="TRUE") %>% select(user_id,retweet_user_id)
+temp3 = unique(tweetRetweetUserIds)
+temp3 = as.data.table(temp3)
+temp4 = temp2 %>% select(user_id,FinalCategory)
+temp4 = as.data.table(temp4)
+setkey(temp3, user_id)
+setkey(temp4, user_id)
+Result <- merge(temp3,temp4, by= "user_id", all.x=TRUE)
+ResultTemp = Result %>% filter(!is.na(FinalCategory))
+
+fwrite(ResultTemp,file = paste0("UsersCommunityEdges.csv"), sep="\t")
+ResultTemp1 = ResultTemp
+#ResultTemp = ResultTemp %>% rename(source = user_id, target = retweet_user_id)
+ResultTemp$source = ResultTemp$user_id
+ResultTemp$user_id = NULL
+ResultTemp$target = ResultTemp$retweet_user_id
+ResultTemp$retweet_user_id = NULL
+ResultTemp$FinalCategory = NULL
+
+fwrite(ResultTemp,file = paste0("Edges20PercNode.csv"), sep="\t")
+a = ResultTemp[sample(nrow(ResultTemp), as.integer(nrow(ResultTemp)*0.5)), ]
+
+
+setwd("C:/#metoo/Output")
+temp2 = fread("UsersCommunity.csv", sep = "\t")
+temp2 = temp2[sample(nrow(temp2), as.integer(nrow(temp2)*0.50)), ]
+temp = fread("UsersCommunityEdges.csv", sep = "\t")
+
+temp2$n = NULL
+temp3 = temp2
+temp2$FinalCategory = NULL
+#temp$FinalCategory = NULL
+temp = as.data.table(temp)
+temp2 = as.data.table(temp2)
+setkey(temp, user_id)
+setkey(temp2, user_id)
+Result <- merge(temp2,temp, by= "user_id")
+#View(Result)
+setkey(Result,retweet_user_id)
+Result$source = Result$user_id
+Result$user_id = NULL
+#View(Result)
+Result$user_id = Result$retweet_user_id
+Result$retweet_user_id = NULL
+Result1 <- merge(Result,temp2, by= "user_id")
+Result1$target = Result1$user_id
+Result1$user_id = NULL
+
+temp3 <- tibble::rowid_to_column(temp3, "id")
+rm(Result, temp, temp2)
+
+n = temp3
+e = Result1
+rm(temp3, Result1)
+#setkey(n, user_id)
+#setkey(ColorData, user_id)
+#n = merge(n, ColorData, by="user_id")
+temp =n
+
+n$FinalCategory = NULL
+
+e$user_id = e$source
+e$source = NULL
+setkey(e, user_id)
+setkey(n, user_id)
+Result =merge(n, e, by = "user_id")
+Result$user_id = NULL
+Result$source = Result$id
+Result$id = NULL
+Result$user_id = Result$target
+Result$target = NULL
+setkey(Result, user_id)
+Result = merge(Result, n, by = "user_id")
+Result$target = Result$id
+Result$user_id = NULL
+Result$id = NULL
+
+table(Result$FinalCategory)
+Result$FinalCategory = NULL
+temp$label = temp$user_id
+temp$user_id = NULL
+Result = Result[Result$source!=Result$target]
+
+fwrite(temp,file = paste0("ColorNode.csv"), sep="\t")
+fwrite(Result,file = paste0("ColorEdge.csv"), sep="\t")
+
+```
